@@ -23,7 +23,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     await new Promise(r => setTimeout(r, 600));
-    const result = login(email, password);
+    const result = await login(email, password);
     setLoading(false);
     if (result.ok) {
       navigate(result.user.role === 'customer' ? '/portal' : '/dashboard', { replace: true });
@@ -35,9 +35,10 @@ export default function Login() {
   const quickLogin = async (acc) => {
     setLoading(true);
     await new Promise(r => setTimeout(r, 400));
-    const result = login(acc.email, acc.password);
+    const result = await login(acc.email, acc.password);
     setLoading(false);
     if (result.ok) navigate(result.user.role === 'customer' ? '/portal' : '/dashboard', { replace: true });
+    else setError(result.error);
   };
 
   return (

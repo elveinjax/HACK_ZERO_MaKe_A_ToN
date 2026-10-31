@@ -4,7 +4,7 @@ import { Globe, FileText, CreditCard, Download, RefreshCw, XCircle, TrendingUp }
 export default function Portal() {
   const { currentUser, subscriptions, invoices, payments, plans, customers, formatMoney, currentCurrency, setCurrentCurrency } = useApp();
 
-  const customerId = currentUser?.customerId || 'c1'; // default to c1 for demo customer
+  const customerId = currentUser?.customerId;
   const customer = customers.find(c => c.id === customerId);
   const mySubs = subscriptions.filter(s => s.customerId === customerId);
   const myInvoices = invoices.filter(i => i.customerId === customerId);

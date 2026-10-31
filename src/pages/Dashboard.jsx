@@ -1,7 +1,6 @@
 import { useApp } from '../context/AppContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TrendingUp, TrendingDown, Users, FileText, CreditCard, AlertTriangle, Activity, ArrowUpRight } from 'lucide-react';
-import { dashboardStats } from '../data/mockData';
 
 const mrrData = [
   { month: 'May', mrr: 9800 }, { month: 'Jun', mrr: 10200 }, { month: 'Jul', mrr: 10800 },
@@ -32,10 +31,11 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function Dashboard() {
-  const { subscriptions, invoices, customers, formatMoney } = useApp();
+  const { subscriptions, invoices, customers, payments, monthlyRecurringRevenue, formatMoney } = useApp();
   const active = subscriptions.filter(s => s.status === 'active').length;
   const overdue = invoices.filter(i => i.status === 'overdue').length;
   const outstanding = invoices.filter(i => ['confirmed', 'overdue'].includes(i.status)).reduce((a, i) => a + i.total, 0);
+  const revenueCollected = payments.reduce((total, payment) => total + payment.amount, 0);
 
   const recentSubs = subscriptions.slice(0, 5);
   const overdueInvs = invoices.filter(i => i.status === 'overdue').slice(0, 4);
@@ -59,7 +59,7 @@ export default function Dashboard() {
         <div className="stat-card purple">
           <div className="stat-card-header">
             <div>
-              <div className="stat-value">{formatMoney(dashboardStats.mrr)}</div>
+              <div className="stat-value">{formatMoney(monthlyRecurringRevenue)}</div>
               <div className="stat-label">Monthly Recurring Revenue</div>
             </div>
             <div className="stat-icon purple"><TrendingUp size={20} /></div>
@@ -81,7 +81,7 @@ export default function Dashboard() {
         <div className="stat-card green">
           <div className="stat-card-header">
             <div>
-              <div className="stat-value">{formatMoney(dashboardStats.revenueIn)}</div>
+              <div className="stat-value">{formatMoney(revenueCollected)}</div>
               <div className="stat-label">Revenue Collected</div>
             </div>
             <div className="stat-icon green"><CreditCard size={20} /></div>

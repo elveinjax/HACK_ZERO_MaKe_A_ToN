@@ -5,7 +5,7 @@
 export const ROLES = { ADMIN: 'admin', STAFF: 'staff', CUSTOMER: 'customer' };
 
 export const mockUsers = [
-  { id: 'u1', name: 'Alex Rivera', email: 'admin@brightloop.io', password: 'Admin@123', role: ROLES.ADMIN, avatar: 'AR' },
+  { id: 'u1', name: 'ajay', email: 'admin@brightloop.io', password: 'Admin@123', role: ROLES.ADMIN, avatar: 'AR' },
   { id: 'u2', name: 'Jordan Blake', email: 'staff@brightloop.io', password: 'Staff@123', role: ROLES.STAFF, avatar: 'JB' },
   { id: 'u3', name: 'Sam Chen',    email: 'customer@brightloop.io', password: 'Cust@123', role: ROLES.CUSTOMER, avatar: 'SC', customerId: 'c1' },
 ];

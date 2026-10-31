@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { Mail, Lock, User, Building2, Phone, MapPin, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 
 function getStrength(pwd) {
   let score = 0;
@@ -19,7 +19,10 @@ export default function Register() {
   const { register } = useApp();
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +42,7 @@ export default function Register() {
     if (strength < 4) { setError('Password does not meet all requirements.'); return; }
     setLoading(true);
     await new Promise(r => setTimeout(r, 600));
-    const result = register(name, email, password);
+    const result = await register(name, email, password, company, phone, address);
     setLoading(false);
     if (result.ok) navigate('/portal');
     else setError(result.error);
@@ -73,16 +76,40 @@ export default function Register() {
           <div className="form-group">
             <label className="form-label">Full name</label>
             <div style={{ position: 'relative' }}>
-              <User size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <Building2 size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input id="reg-name" className="form-input" style={{ paddingLeft: 38 }} type="text" placeholder="Jane Smith" value={name} onChange={e => setName(e.target.value)} required />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Company name</label>
+            <div style={{ position: 'relative' }}>
+              <User size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input id="reg-company" className="form-input" style={{ paddingLeft: 38 }} type="text" placeholder="Your company" value={company} onChange={e => setCompany(e.target.value)} required />
             </div>
           </div>
 
           <div className="form-group">
             <label className="form-label">Email address</label>
             <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <Phone size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input id="reg-email" className="form-input" style={{ paddingLeft: 38 }} type="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Phone number <span style={{ color: 'var(--text-muted)' }}>(optional)</span></label>
+            <div style={{ position: 'relative' }}>
+              <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input id="reg-phone" className="form-input" style={{ paddingLeft: 38 }} type="tel" placeholder="+1 555-0100" value={phone} onChange={e => setPhone(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Billing address <span style={{ color: 'var(--text-muted)' }}>(optional)</span></label>
+            <div style={{ position: 'relative' }}>
+              <MapPin size={16} style={{ position: 'absolute', left: 12, top: 14, color: 'var(--text-muted)' }} />
+              <input id="reg-address" className="form-input" style={{ paddingLeft: 38 }} type="text" placeholder="Street, city, state" value={address} onChange={e => setAddress(e.target.value)} />
             </div>
           </div>
 

@@ -1,25 +1,324 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { mockUsers, mockProducts, mockPlans, mockCustomers, mockSubscriptions,
-         mockTaxes, mockDiscounts, mockInvoices, mockPayments, mockTemplates, mockStaff } from '../data/mockData';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 const AppContext = createContext(null);
 
+async function request(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (response.status === 204) return null;
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
+  return result;
+}
+
+const initialData = {
+  products: [],
+  plans: [],
+  customers: [],
+  subscriptions: [],
+  taxes: [],
+  discounts: [],
+  invoices: [],
+  payments: [],
+  templates: [],
+  staff: [],
+  users: [],
+};
+
 export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [products, setProducts] = useState(mockProducts);
-  const [plans, setPlans] = useState(mockPlans);
-  const [customers, setCustomers] = useState(mockCustomers);
-  const [subscriptions, setSubscriptions] = useState(mockSubscriptions);
-  const [taxes, setTaxes] = useState(mockTaxes);
-  const [discounts, setDiscounts] = useState(mockDiscounts);
-  const [invoices, setInvoices] = useState(mockInvoices);
-  const [payments, setPayments] = useState(mockPayments);
-  const [templates, setTemplates] = useState(mockTemplates);
-  const [staff, setStaff] = useState(mockStaff);
-  const [users, setUsers] = useState(mockUsers);
+  const [data, setData] = useState(initialData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // ---- Currency conversion state ----
-const SUPPORTED_CURRENCIES = ['USD','EUR','GBP','INR','CAD','AUD','JPY'];
+  const loadData = async () => {
+    const result = await request('/api/bootstrap');
+    setData(Object.fromEntries(
+      Object.keys(initialData).map((collection) => [collection, result[collection] || []]),
+    ));
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    async function restoreSession() {
+      try {
+        const { user } = await request('/api/auth/session');
+        if (user) {
+          const result = await request('/api/bootstrap');
+          if (active) {
+            setData(Object.fromEntries(
+              Object.keys(initialData).map((collection) => [collection, result[collection] || []]),
+            ));
+            setCurrentUser(user);
+          }
+        }
+      } catch (requestError) {
+        if (active) setError(requestError.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    restoreSession();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!['admin', 'staff'].includes(currentUser?.role)) return undefined;
+
+    let active = true;
+    const refresh = async () => {
+      try {
+        const result = await request('/api/bootstrap');
+        if (active) {
+          setData(Object.fromEntries(
+            Object.keys(initialData).map((collection) => [collection, result[collection] || []]),
+          ));
+        }
+      } catch (requestError) {
+        if (active) setError(requestError.message);
+      }
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const intervalId = window.setInterval(refreshWhenVisible, 5000);
+    window.addEventListener('focus', refreshWhenVisible);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshWhenVisible);
+    };
+  }, [currentUser?.role]);
+
+  const perform = async (operation) => {
+    try {
+      const result = await operation();
+      setError('');
+      return result;
+    } catch (requestError) {
+      setError(requestError.message);
+      return null;
+    }
+  };
+
+  const login = async (email, password) => {
+    try {
+      const { user } = await request('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      await loadData();
+      setCurrentUser(user);
+      setError('');
+      return { ok: true, user };
+    } catch (requestError) {
+      return { ok: false, error: requestError.message };
+    }
+  };
+
+  const register = async (name, email, password, company, phone, address) => {
+    try {
+      const { user } = await request('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password, company, phone, address }),
+      });
+      await loadData();
+      setCurrentUser(user);
+      setError('');
+      return { ok: true, user };
+    } catch (requestError) {
+      return { ok: false, error: requestError.message };
+    }
+  };
+
+  const logout = async () => {
+    await perform(async () => {
+      await request('/api/auth/logout', { method: 'POST' });
+      setCurrentUser(null);
+      setData(initialData);
+    });
+  };
+
+  const createRecord = (collection, fields) => perform(async () => {
+    const { record } = await request(`/api/data/${collection}`, {
+      method: 'POST',
+      body: JSON.stringify(fields),
+    });
+    setData((current) => ({
+      ...current,
+      [collection]: [...current[collection], record],
+    }));
+    return record;
+  });
+
+  const updateRecord = (collection, id, fields) => perform(async () => {
+    const { record } = await request(`/api/data/${collection}/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    });
+    setData((current) => ({
+      ...current,
+      [collection]: current[collection].map((item) => item.id === id ? record : item),
+    }));
+    return record;
+  });
+
+  const addProduct = (product) => createRecord('products', {
+    ...product,
+    variants: product.variants || [],
+  });
+  const updateProduct = (id, fields) => updateRecord('products', id, fields);
+  const archiveProduct = (id) => updateProduct(id, { status: 'archived' });
+
+  const addPlan = (plan) => createRecord('plans', { ...plan, status: 'active' });
+  const updatePlan = (id, fields) => updateRecord('plans', id, fields);
+
+  const addCustomer = (customer) => createRecord('customers', {
+    ...customer,
+    createdAt: new Date().toISOString().split('T')[0],
+  });
+  const updateCustomer = (id, fields) => updateRecord('customers', id, fields);
+
+  const addSubscription = (subscription) => createRecord('subscriptions', {
+    ...subscription,
+    discountId: subscription.discountId || null,
+    templateId: subscription.templateId || null,
+    number: `SUB-${String(data.subscriptions.length + 1).padStart(3, '0')}`,
+    status: 'draft',
+  });
+  const updateSubscription = (id, fields) => updateRecord('subscriptions', id, fields);
+
+  const generateInvoices = () => perform(async () => {
+    const dueSubscriptions = data.subscriptions.filter((subscription) => subscription.status === 'active');
+    const newInvoices = dueSubscriptions.map((subscription) => {
+      const existing = data.invoices.find((invoice) => (
+        invoice.subscriptionId === subscription.id
+        && invoice.status !== 'paid'
+        && invoice.status !== 'void'
+      ));
+      if (existing) return null;
+
+      const plan = data.plans.find((item) => item.id === subscription.planId);
+      const subtotal = subscription.qty * subscription.unitPrice;
+      return {
+        number: `INV-${String((data.invoices.length + Math.random() * 100) | 0).padStart(4, '0')}`,
+        subscriptionId: subscription.id,
+        customerId: subscription.customerId,
+        status: 'draft',
+        issueDate: new Date().toISOString().split('T')[0],
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        lines: [{
+          product: plan?.name || 'Plan',
+          qty: subscription.qty,
+          unitPrice: subscription.unitPrice,
+          tax: 18,
+          discount: 0,
+        }],
+        subtotal,
+        taxAmount: subtotal * 0.18,
+        discountAmount: 0,
+        total: subtotal * 1.18,
+        notes: '',
+      };
+    }).filter(Boolean);
+
+    for (const invoice of newInvoices) {
+      const { record } = await request('/api/data/invoices', {
+        method: 'POST',
+        body: JSON.stringify(invoice),
+      });
+      setData((current) => ({ ...current, invoices: [...current.invoices, record] }));
+    }
+    return newInvoices.length;
+  });
+
+  const addInvoice = (invoice) => createRecord('invoices', {
+    ...invoice,
+    number: `INV-${String(data.invoices.length + 1).padStart(4, '0')}`,
+  });
+  const updateInvoice = (id, fields) => updateRecord('invoices', id, fields);
+
+  const addPayment = (payment) => perform(async () => {
+    const { record } = await request('/api/data/payments', {
+      method: 'POST',
+      body: JSON.stringify(payment),
+    });
+    setData((current) => ({
+      ...current,
+      payments: [...current.payments, record],
+      invoices: payment.amount >= (current.invoices.find((invoice) => invoice.id === payment.invoiceId)?.total ?? Infinity)
+        ? current.invoices.map((invoice) => invoice.id === payment.invoiceId
+          ? { ...invoice, status: 'paid' }
+          : invoice)
+        : current.invoices,
+    }));
+    return record;
+  });
+
+  const addTax = (tax) => createRecord('taxes', tax);
+  const updateTax = (id, fields) => updateRecord('taxes', id, fields);
+  const addDiscount = (discount) => createRecord('discounts', {
+    ...discount,
+    usedCount: 0,
+    status: 'active',
+  });
+  const updateDiscount = (id, fields) => updateRecord('discounts', id, fields);
+
+  const addStaff = (staffMember) => perform(async () => {
+    const { staff, user } = await request('/api/staff', {
+      method: 'POST',
+      body: JSON.stringify(staffMember),
+    });
+    setData((current) => ({
+      ...current,
+      staff: [...current.staff, staff],
+      users: [...current.users, user],
+    }));
+    return staff;
+  });
+
+  const updateStaffStatus = (id, status) => perform(async () => {
+    const { staff } = await request(`/api/staff/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+    setData((current) => ({
+      ...current,
+      staff: current.staff.map((member) => member.id === id ? staff : member),
+    }));
+    return staff;
+  });
+
+  const deactivateStaff = (id) => {
+    const member = data.staff.find((staffMember) => staffMember.id === id);
+    if (!member) return;
+    return updateStaffStatus(id, member.status === 'active' ? 'inactive' : 'active');
+  };
+
+  const addTemplate = (template) => createRecord('templates', template);
+
+  const monthlyRecurringRevenue = data.subscriptions
+    .filter((subscription) => subscription.status === 'active')
+    .reduce((total, subscription) => {
+      const cycle = data.plans.find((plan) => plan.id === subscription.planId)?.cycle?.toLowerCase();
+      const months = cycle?.includes('year') || cycle?.includes('annual')
+        ? 12
+        : cycle?.includes('quarter')
+          ? 3
+          : 1;
+      return total + subscription.qty * subscription.unitPrice / months;
+    }, 0);
+
   const STATIC_RATES = {
     USD: 1,
     EUR: 0.92,
@@ -30,15 +329,8 @@ const SUPPORTED_CURRENCIES = ['USD','EUR','GBP','INR','CAD','AUD','JPY'];
     JPY: 150,
   };
   const [currentCurrency, setCurrentCurrency] = useState('USD');
-  const [rates, setRates] = useState(STATIC_RATES);
+  const [rates] = useState(STATIC_RATES);
 
-  // Load static rates on mount (fallback to hard‑coded values)
-  // eslint-disable-next-line react-hooks/rules‑of‑hooks
-  useEffect(() => {
-    setRates(STATIC_RATES);
-  }, []);
-
-  // Helper to format money values according to selected currency
   const formatMoney = (amount) => {
     if (amount == null) return '';
     const rate = rates[currentCurrency] || 1;
@@ -49,118 +341,47 @@ const SUPPORTED_CURRENCIES = ['USD','EUR','GBP','INR','CAD','AUD','JPY'];
     }).format(converted);
   };
 
-  const login = (email, password) => {
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) { setCurrentUser(user); return { ok: true, user }; }
-    return { ok: false, error: 'Invalid email or password.' };
-  };
-
-  const register = (name, email, password) => {
-    if (users.find(u => u.email === email)) return { ok: false, error: 'Email already registered.' };
-    const newUser = {
-      id: `u${Date.now()}`, name, email, password,
-      role: 'customer', avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2),
-      customerId: null,
-    };
-    setUsers(prev => [...prev, newUser]);
-    setCurrentUser(newUser);
-    return { ok: true, user: newUser };
-  };
-
-  const logout = () => setCurrentUser(null);
-
-  // Products
-  const addProduct = (p) => setProducts(prev => [...prev, { ...p, id: `p${Date.now()}`, variants: p.variants || [] }]);
-  const updateProduct = (id, data) => setProducts(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
-  const archiveProduct = (id) => setProducts(prev => prev.map(p => p.id === id ? { ...p, status: 'archived' } : p));
-
-  // Plans
-  const addPlan = (pl) => setPlans(prev => [...prev, { ...pl, id: `pl${Date.now()}`, status: 'active' }]);
-  const updatePlan = (id, data) => setPlans(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
-
-  // Customers
-  const addCustomer = (c) => setCustomers(prev => [...prev, { ...c, id: `c${Date.now()}`, createdAt: new Date().toISOString().split('T')[0] }]);
-  const updateCustomer = (id, data) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
-
-  // Subscriptions
-  const addSubscription = (s) => {
-    const num = `SUB-${String(subscriptions.length + 1).padStart(3, '0')}`;
-    setSubscriptions(prev => [...prev, { ...s, id: `s${Date.now()}`, number: num, status: 'draft' }]);
-  };
-  const updateSubscription = (id, data) => setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-
-  // Invoices
-  const generateInvoices = () => {
-    const due = subscriptions.filter(s => s.status === 'active');
-    const newInvs = due.map(s => {
-      const existing = invoices.find(i => i.subscriptionId === s.id && i.status !== 'paid' && i.status !== 'void');
-      if (existing) return null;
-      const plan = plans.find(p => p.id === s.planId);
-      const customer = customers.find(c => c.id === s.customerId);
-      const num = `INV-${String(invoices.length + Math.random() * 100 | 0).padStart(4, '0')}`;
-      return {
-        id: `i${Date.now()}${Math.random()}`, number: num,
-        subscriptionId: s.id, customerId: s.customerId, status: 'draft',
-        issueDate: new Date().toISOString().split('T')[0],
-        dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        lines: [{ product: plan?.name || 'Plan', qty: s.qty, unitPrice: s.unitPrice, tax: 18, discount: 0 }],
-        subtotal: s.qty * s.unitPrice,
-        taxAmount: s.qty * s.unitPrice * 0.18,
-        discountAmount: 0,
-        total: s.qty * s.unitPrice * 1.18,
-        notes: '',
-      };
-    }).filter(Boolean);
-    setInvoices(prev => [...prev, ...newInvs]);
-    return newInvs.length;
-  };
-  const addInvoice = (inv) => setInvoices(prev => [...prev, { ...inv, id: `i${Date.now()}`, number: `INV-${String(prev.length + 1).padStart(4,'0')}` }]);
-  const updateInvoice = (id, data) => setInvoices(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
-
-  // Payments
-  const addPayment = (py) => {
-    const newPy = { ...py, id: `py${Date.now()}`, status: 'completed' };
-    setPayments(prev => [...prev, newPy]);
-    // Auto-mark invoice paid if fully covered
-    const inv = invoices.find(i => i.id === py.invoiceId);
-    if (inv && py.amount >= inv.total) updateInvoice(py.invoiceId, { status: 'paid' });
-    return newPy;
-  };
-
-  // Taxes
-  const addTax = (t) => setTaxes(prev => [...prev, { ...t, id: `t${Date.now()}` }]);
-  const updateTax = (id, data) => setTaxes(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
-
-  // Discounts
-  const addDiscount = (d) => setDiscounts(prev => [...prev, { ...d, id: `d${Date.now()}`, usedCount: 0, status: 'active' }]);
-  const updateDiscount = (id, data) => setDiscounts(prev => prev.map(d => d.id === id ? { ...d, ...data } : d));
-
-  // Staff
-  const addStaff = (s) => {
-    const newUser = { ...s, id: `u${Date.now()}`, role: 'staff', avatar: s.name.split(' ').map(n=>n[0]).join('').toUpperCase(), status: 'active', createdAt: new Date().toISOString().split('T')[0] };
-    setStaff(prev => [...prev, newUser]);
-    setUsers(prev => [...prev, { ...newUser, password: s.password }]);
-  };
-  const deactivateStaff = (id) => setStaff(prev => prev.map(s => s.id === id ? { ...s, status: 'inactive' } : s));
-
-  // Templates
-  const addTemplate = (t) => setTemplates(prev => [...prev, { ...t, id: `tmpl${Date.now()}` }]);
-
   return (
     <AppContext.Provider value={{
-      currentUser, login, register, logout,
-      products, addProduct, updateProduct, archiveProduct,
-      plans, addPlan, updatePlan,
-      customers, addCustomer, updateCustomer,
-      subscriptions, addSubscription, updateSubscription,
-      invoices, generateInvoices, addInvoice, updateInvoice,
-      payments, addPayment,
-      taxes, addTax, updateTax,
-      discounts, addDiscount, updateDiscount,
-      staff, addStaff, deactivateStaff,
-      templates, addTemplate,
-      users,
-      // Currency utilities
+      currentUser,
+      login,
+      register,
+      logout,
+      loading,
+      error,
+      clearError: () => setError(''),
+      products: data.products,
+      addProduct,
+      updateProduct,
+      archiveProduct,
+      plans: data.plans,
+      addPlan,
+      updatePlan,
+      customers: data.customers,
+      addCustomer,
+      updateCustomer,
+      subscriptions: data.subscriptions,
+      addSubscription,
+      updateSubscription,
+      invoices: data.invoices,
+      generateInvoices,
+      addInvoice,
+      updateInvoice,
+      payments: data.payments,
+      addPayment,
+      taxes: data.taxes,
+      addTax,
+      updateTax,
+      discounts: data.discounts,
+      addDiscount,
+      updateDiscount,
+      staff: data.staff,
+      addStaff,
+      deactivateStaff,
+      templates: data.templates,
+      addTemplate,
+      users: data.users,
+      monthlyRecurringRevenue,
       currentCurrency,
       setCurrentCurrency,
       rates,

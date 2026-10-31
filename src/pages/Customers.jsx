@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Plus, Search, Users, Edit2, X, Mail, Phone, MapPin, Building2 } from 'lucide-react';
 
@@ -71,6 +72,7 @@ function CustomerModal({ customer, onClose, onSave }) {
 const segmentColor = { Enterprise: 'purple', SMB: 'teal', Trial: 'amber', 'Non-profit': 'green' };
 
 export default function Customers() {
+  const navigate = useNavigate();
   const { customers, subscriptions, invoices, addCustomer, updateCustomer, formatMoney } = useApp();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -185,6 +187,12 @@ export default function Customers() {
               {detail.notes && <div className="highlight-box" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{detail.notes}</div>}
             </div>
             <div className="modal-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate('/subscriptions', { state: { customerId: detail.id } })}
+              >
+                <Plus size={14} /> New Subscription
+              </button>
               <button className="btn btn-secondary" onClick={() => { setModal(detail); setDetail(null); }}><Edit2 size={14} /> Edit</button>
             </div>
           </div>

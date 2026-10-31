@@ -97,8 +97,9 @@ export default function Invoices() {
     return match && statusMatch;
   });
 
-  const handleGenerate = () => {
-    const count = generateInvoices();
+  const handleGenerate = async () => {
+    const count = await generateInvoices();
+    if (count == null) return;
     setGenMsg(`Generated ${count} invoice(s) for active subscriptions.`);
     setTimeout(() => setGenMsg(''), 4000);
   };

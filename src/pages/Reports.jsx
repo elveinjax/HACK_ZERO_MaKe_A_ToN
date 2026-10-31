@@ -40,7 +40,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function Reports() {
-  const { subscriptions, invoices, customers, payments, formatMoney } = useApp();
+  const { subscriptions, invoices, customers, payments, monthlyRecurringRevenue, formatMoney } = useApp();
 
   const active = subscriptions.filter(s => s.status === 'active').length;
   const churn = subscriptions.filter(s => s.status === 'cancelled').length;
@@ -67,7 +67,7 @@ export default function Reports() {
         <div className="stat-card purple">
           <div className="stat-card-header">
             <div>
-              <div className="stat-value">{formatMoney(dashboardStats.mrr)}</div>
+              <div className="stat-value">{formatMoney(monthlyRecurringRevenue)}</div>
               <div className="stat-label">MRR</div>
             </div>
             <div className="stat-icon purple"><TrendingUp size={20} /></div>
@@ -77,7 +77,7 @@ export default function Reports() {
         <div className="stat-card teal">
           <div className="stat-card-header">
             <div>
-              <div className="stat-value">{formatMoney(dashboardStats.mrr * 12)}</div>
+              <div className="stat-value">{formatMoney(monthlyRecurringRevenue * 12)}</div>
               <div className="stat-label">ARR</div>
             </div>
             <div className="stat-icon teal"><TrendingUp size={20} /></div>

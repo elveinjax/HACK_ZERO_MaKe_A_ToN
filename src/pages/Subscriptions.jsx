@@ -1,16 +1,36 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Plus, Search, BookOpen, X, Edit2, Play, Pause, XCircle, RefreshCw } from 'lucide-react';
 
 const statusOrder = ['Draft', 'Quotation', 'Confirmed', 'Active', 'Closed'];
 const statusColor = { draft: 'draft', quotation: 'pending', confirmed: 'confirmed', active: 'active', closed: 'paused', paused: 'paused', trial: 'trial', cancelled: 'cancelled' };
 
-function SubModal({ sub, customers, plans, templates, onClose, onSave }) {
+function SubModal({ sub, customers, plans, templates, initialCustomerId = '', onClose, onSave }) {
   const [form, setForm] = useState(sub || {
-    customerId: '', planId: '', startDate: '', expiryDate: '', paymentTerms: 'Net 30',
+    customerId: initialCustomerId, planId: '', startDate: '', expiryDate: '', paymentTerms: 'Net 30',
     qty: 1, unitPrice: '', notes: '', templateId: '', taxes: [],
   });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    const quantity = Number(form.qty);
+    const unitPrice = Number(form.unitPrice);
+    if (!form.customerId || !form.planId || !Number.isInteger(quantity) || quantity < 1
+      || !Number.isFinite(unitPrice) || unitPrice < 0) {
+      setSaveError('Select a customer and plan, and enter a valid quantity and unit price.');
+      return;
+    }
+
+    setSaving(true);
+    setSaveError('');
+    const result = await onSave({ ...form, qty: quantity, unitPrice });
+    setSaving(false);
+    if (result) onClose();
+    else setSaveError('The subscription could not be saved. Check the error message and try again.');
+  };
 
   const applyTemplate = (tmplId) => {
     const t = templates.find(t => t.id === tmplId);
@@ -96,8 +116,9 @@ function SubModal({ sub, customers, plans, templates, onClose, onSave }) {
 
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => { onSave(form); onClose(); }}>
-            {sub ? 'Save Changes' : 'Create Subscription'}
+          {saveError && <div className="alert alert-error" role="alert">{saveError}</div>}
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : sub ? 'Save Changes' : 'Create Subscription'}
           </button>
         </div>
       </div>
@@ -107,9 +128,11 @@ function SubModal({ sub, customers, plans, templates, onClose, onSave }) {
 
 export default function Subscriptions() {
   const { subscriptions, customers, plans, templates, addSubscription, updateSubscription, formatMoney } = useApp();
+  const location = useLocation();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(() => location.state?.customerId ? 'add' : null);
+  const [newCustomerId, setNewCustomerId] = useState(() => location.state?.customerId || '');
 
   const getCustomerName = (id) => customers.find(c => c.id === id)?.company || id;
   const getPlanName = (id) => plans.find(p => p.id === id)?.name || id;
@@ -134,7 +157,7 @@ export default function Subscriptions() {
             <h1 className="page-title">Subscriptions</h1>
             <p className="page-subtitle">{subscriptions.filter(s => s.status === 'active').length} active · {subscriptions.length} total</p>
           </div>
-          <button id="add-sub-btn" className="btn btn-primary" onClick={() => setModal('add')}>
+          <button id="add-sub-btn" className="btn btn-primary" onClick={() => { setNewCustomerId(''); setModal('add'); }}>
             <Plus size={16} /> New Subscription
           </button>
         </div>
@@ -200,17 +223,19 @@ export default function Subscriptions() {
             <div className="empty-icon"><BookOpen size={28} /></div>
             <div className="empty-title">No subscriptions found</div>
             <div className="empty-desc">Create your first subscription or adjust filters.</div>
-            <button className="btn btn-primary" onClick={() => setModal('add')}><Plus size={16} /> New Subscription</button>
+            <button className="btn btn-primary" onClick={() => { setNewCustomerId(''); setModal('add'); }}><Plus size={16} /> New Subscription</button>
           </div>
         )}
       </div>
 
       {modal && (
         <SubModal
+          key={modal === 'add' ? `new-${newCustomerId}` : modal.id}
           sub={modal === 'add' ? null : modal}
           customers={customers}
           plans={plans}
           templates={templates}
+          initialCustomerId={modal === 'add' ? newCustomerId : ''}
           onClose={() => setModal(null)}
           onSave={form => modal === 'add' ? addSubscription(form) : updateSubscription(modal.id, form)}
         />

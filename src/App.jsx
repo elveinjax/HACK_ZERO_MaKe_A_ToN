@@ -18,15 +18,29 @@ import Portal from './pages/Portal';
 import Settings from './pages/Settings';
 
 function AppRoutes() {
-  const { currentUser } = useApp();
+  const { currentUser, loading, error, clearError } = useApp();
+
+  if (loading) {
+    return <div className="auth-page">Connecting to Brightloop…</div>;
+  }
+
+  const databaseNotice = error ? (
+    <div className="alert alert-error" role="alert">
+      {error}
+      <button type="button" onClick={clearError} style={{ marginLeft: 12 }}>Dismiss</button>
+    </div>
+  ) : null;
 
   if (!currentUser) {
     return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+      <>
+        {databaseNotice}
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </>
     );
   }
 
@@ -35,6 +49,7 @@ function AppRoutes() {
       <div className="app-layout">
         <Sidebar />
         <div className="main-content">
+          {databaseNotice}
           <Routes>
             <Route path="/portal" element={<Portal />} />
             <Route path="*" element={<Navigate to="/portal" replace />} />
@@ -49,6 +64,7 @@ function AppRoutes() {
       <Sidebar />
       <div className="main-content">
         <TopBar />
+        {databaseNotice}
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
